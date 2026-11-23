@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Monado pose tap: OpenXR overlay session (no layers, the running game keeps the headset)
+# logging every xdev's pose + velocity in Probe's format. Usage: tools/linux/tap --seconds 120
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+PYGLFW_LIBRARY="$(nix-build '<nixpkgs>' -A glfw --no-out-link 2>/dev/null)/lib/libglfw.so"
+export PYGLFW_LIBRARY DISPLAY=${DISPLAY:-:0}
+exec uv run -q --with pyopenxr --with glfw --with PyOpenGL python -I tools/xr_pose_tap.py "$@" 2> >(grep -v -E '^(\s|LOG|$)' >&2)

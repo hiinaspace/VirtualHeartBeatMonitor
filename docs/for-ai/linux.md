@@ -24,11 +24,22 @@ The C# `ImuSample_t` (64 bytes) matches Linux: `openvr.h` declares it under `pac
 ## Runtimes
 
 - **SteamVR (native Linux)**: the lighthouse driver serves `/devices/lighthouse/<serial>/imu`
-  as on Windows (expected; to confirm with `Probe check`).
+  as on Windows (confirmed 2026-11-22 on a Beyond 2: HMD 1014 Hz, Index and Tundra 250 Hz).
+  `vrclient.so` needs libuuid, libGL and X11 from outside the Steam runtime, or init fails with
+  `Init_VRClientDLLNotFound (102)` on NixOS: run tools through `tools/linux/vr`
+  (`tools/linux/vr Probe check`).
 - **Monado with its `steamvr_lh` driver**: the lighthouse driver runs inside Monado, but Monado's
   `IVRIOBuffer` (`src/xrt/drivers/steamvr_lh/interfaces/iobuffer.cpp`) is an empty stub, so the
   raw IMU the driver writes is dropped and no client can read it. A patch there is the way to
   get raw IMU under Monado.
+- **Monado poses over OpenXR**: `tools/linux/tap` (`tools/xr_pose_tap.py`) opens an
+  `XR_EXTX_overlay` session that submits no layers, so the running game keeps the headset, and
+  logs every device via `XR_MNDX_xdev_space` (chest tracker included, no actions needed) in
+  the `poses_*.csv` format Probe writes. It writes three folders: frame-predicted (90 Hz,
+  predictedDisplayTime), frame-now (90 Hz) and poll-now (1 kHz). Replay with `--source poses`;
+  with no `imu_*.csv`, the reference falls back to the tracker poses (no longer independent).
+  First run, 2026-11-22: the three modes gave the same numbers, and the chest tracker
+  peak tracked the pulse-ox (84-88 BPM) at prominence about 64.
 - **OpenXR in general** exposes poses and velocities only. `Replay --source poses --resample 90`
   estimates what that costs, using the pose stream Probe records next to the raw IMU.
 

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Run a VHBM tool against native SteamVR: vrclient.so needs libuuid, libGL, X11
+# from outside the Steam runtime.  Usage: ./vr Probe check | ./vr LiveCli --beats
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+tool=$1; shift
+libs=/run/opengl-driver/lib
+for a in util-linux.lib libglvnd xorg.libX11 xorg.libXext libxcb; do
+  libs+=":$(nix-build '<nixpkgs>' -A "$a" --no-out-link 2>/dev/null)/lib"
+done
+exec nix-shell -p dotnet-sdk_10 --run "LD_LIBRARY_PATH=$libs dotnet run --project tools/$tool -- $(printf '%q ' "$@")"

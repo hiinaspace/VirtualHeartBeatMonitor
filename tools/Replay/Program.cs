@@ -67,7 +67,15 @@ const string ReferenceKind = "Tracker";
 if (source != RecordingSource.Imu || resampleHz > 0)
 {
     // Score against the same reference as a raw-IMU replay: the chest tracker's own raw IMU.
-    var rawReference = Recording.Load(folder).Devices.FirstOrDefault(d => d.Kind == ReferenceKind);
+    // No raw IMU (e.g. a Monado/OpenXR pose recording): fall back to the tracker's own poses at full rate.
+    RecordedDevice? rawReference;
+    try { rawReference = Recording.Load(folder).Devices.FirstOrDefault(d => d.Kind == ReferenceKind); }
+    catch (FileNotFoundException)
+    {
+        rawReference = Recording.Load(folder, new RecordingLoadOptions { Source = RecordingSource.Poses })
+            .Devices.FirstOrDefault(d => d.Kind == ReferenceKind);
+        Console.WriteLine("Reference: tracker poses (no raw IMU in this recording)");
+    }
     recording.Devices.RemoveAll(d => d.Kind == ReferenceKind);
     if (rawReference != null) recording.Devices.Add(rawReference);
 }
