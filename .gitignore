@@ -2,6 +2,6 @@ bin/
 obj/
 .vs/
 *.user
-recordings/
-probe-reports/
-artifacts/
+/recordings/
+/probe-reports/
+/artifacts/
