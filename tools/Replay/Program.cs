@@ -19,6 +19,11 @@ const string Usage = """
       --timeline    print one timeline row every N seconds (default 5, 0 = off)
       --csv         write replay.csv into the recording folder
       --beat K=V    override a BeatDetector setting, e.g. --beat ProximityFloor=0.6 (repeatable)
+      --source S    imu (default) or poses: feed the fused devices from tracked poses instead of
+                    raw IMU, as a runtime without raw IMU access (OpenXR) would. The reference
+                    tracker always comes from raw IMU.
+      --resample HZ sample every fused device at a fixed rate (latest sample at each tick, no
+                    anti-alias filter), e.g. 90 for once per rendered frame. Default: as recorded.
     """;
 
 if (args.Length == 0 || args[0] is "-h" or "--help")
@@ -35,6 +40,8 @@ double headWeight = 2, handWeight = 1, chestWeight = 3;
 double timelineEvery = 5;
 bool writeCsv = false;
 var beatOptions = new Dictionary<string, double>();
+var source = RecordingSource.Imu;
+double resampleHz = 0;
 for (int i = 1; i < args.Length; i++)
 {
     switch (args[i])
@@ -48,15 +55,24 @@ for (int i = 1; i < args.Length; i++)
         case "--chest-weight": chestWeight = double.Parse(args[++i], CultureInfo.InvariantCulture); break;
         case "--timeline": timelineEvery = double.Parse(args[++i], CultureInfo.InvariantCulture); break;
         case "--csv": writeCsv = true; break;
+        case "--source": source = Enum.Parse<RecordingSource>(args[++i], ignoreCase: true); break;
+        case "--resample": resampleHz = double.Parse(args[++i], CultureInfo.InvariantCulture); break;
         case "--beat": { var kv = args[++i].Split('='); beatOptions[kv[0]] = double.Parse(kv[1], CultureInfo.InvariantCulture); break; }
         default: Console.Error.WriteLine($"Unknown option '{args[i]}'\n\n{Usage}"); return 1;
     }
 }
 
-var recording = Recording.Load(folder);
+var recording = Recording.Load(folder, new RecordingLoadOptions { Source = source, ResampleHz = resampleHz });
+const string ReferenceKind = "Tracker";
+if (source != RecordingSource.Imu || resampleHz > 0)
+{
+    // Score against the same reference as a raw-IMU replay: the chest tracker's own raw IMU.
+    var rawReference = Recording.Load(folder).Devices.FirstOrDefault(d => d.Kind == ReferenceKind);
+    recording.Devices.RemoveAll(d => d.Kind == ReferenceKind);
+    if (rawReference != null) recording.Devices.Add(rawReference);
+}
 var engine = new MonitorEngine(new EngineSettings { MotionThresholdDps = motion, MinWindowSeconds = minWindow, MaxMaskedFraction = maxMasked,
     HeadWeight = headWeight, HandWeight = handWeight, ChestWeight = chestWeight });
-const string ReferenceKind = "Tracker";
 foreach (var d in recording.Devices)
 {
     bool useHr = hrDevices?.Contains(d.Kind) ?? d.Kind != ReferenceKind;
@@ -126,6 +142,7 @@ double Median(IEnumerable<double> xs)
 double Pct(int n, int d) => d == 0 ? double.NaN : 100.0 * n / d;
 
 Console.WriteLine($"Recording: {Path.GetFileName(folder.TrimEnd('/', '\\'))}  label='{recording.Label}'  duration {F(Rel(events[^1].t), "0")} s");
+Console.WriteLine($"Input: {source.ToString().ToLowerInvariant()}{(resampleHz > 0 ? $" resampled to {resampleHz.ToString(inv)} Hz" : "")}");
 Console.WriteLine($"Pulse notes: before {F(recording.PulseBeforeBpm ?? double.NaN, "0")}, after {F(recording.PulseAfterBpm ?? double.NaN, "0")}");
 Console.WriteLine($"Fused devices: {string.Join(", ", recording.Devices.Where(d => hrDevices?.Contains(d.Kind) ?? d.Kind != ReferenceKind).Select(d => d.Kind))}; reference: {ReferenceKind} (when its prominence >= 10)");
 
