@@ -15,6 +15,8 @@ public sealed class VrRuntime : IDisposable
     private static readonly uint EventSize = (uint)Marshal.SizeOf<VREvent_t>();
     private bool _disposed;
 
+    static VrRuntime() => OpenVrNative.Install();
+
     public CVRSystem System { get; }
     public CVRIOBuffer? IOBuffer { get; }
 

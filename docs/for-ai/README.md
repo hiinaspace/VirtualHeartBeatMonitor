@@ -25,7 +25,8 @@ vibration and finds its repetition rate with an FFT over 6–12 s windows.
    auto-start), OSC parameters, settings, logs.
 4. [workflows.md](workflows.md): build, test, package, record, replay, and how to use a user's
    diagnostics report to support a new headset.
-5. [project-log.md](project-log.md): dated history of decisions, measurements and fixes.
+5. [linux.md](linux.md): Linux status, runtimes (SteamVR, Monado, OpenXR) and pose-based replay.
+6. [project-log.md](project-log.md): dated history of decisions, measurements and fixes.
    Detailed; read the relevant section when you need the reasoning behind something.
 
 ## Status (2026-11-22)

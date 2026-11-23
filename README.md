@@ -48,6 +48,17 @@ Please do not use results for any medical use.
 3. In VRChat, turn on OSC.
 4. Sit still for about 10 seconds.
 
+## Linux (experimental)
+
+The signal processing, Probe, Replay and a headless console monitor (`tools/LiveCli`) run on
+Linux with native SteamVR; the window and in-headset panels are Windows only. See
+[docs/for-ai/linux.md](docs/for-ai/linux.md).
+
+```sh
+dotnet run --project tools/Probe -- check      # what raw IMU your devices expose
+dotnet run --project tools/LiveCli -- --beats  # heart rate in the terminal, OSC to VRChat
+```
+
 ## Diagnostics report
 
 Click **Create diagnostics report** (window, tray menu, or the SteamVR dashboard tab) and sit

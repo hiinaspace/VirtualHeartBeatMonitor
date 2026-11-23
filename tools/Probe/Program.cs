@@ -40,7 +40,9 @@ catch (VrInitException e)
 }
 catch (DllNotFoundException)
 {
-    Console.Error.WriteLine("openvr_api.dll was not found next to Probe.exe.");
+    Console.Error.WriteLine(OperatingSystem.IsWindows()
+        ? "openvr_api.dll was not found next to Probe.exe."
+        : "libopenvr_api.so was not found. Tried: " + string.Join(", ", OpenVrNative.Candidates()) + " (set OPENVR_API_LIB to its path).");
     return 2;
 }
 

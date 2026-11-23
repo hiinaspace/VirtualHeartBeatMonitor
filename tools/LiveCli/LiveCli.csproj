@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Headless live monitor for Linux (and Windows): the app's LiveSession and settings,
+       printed to the console and sent over OSC, without the WinForms window or overlays. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>HeartBeat.LiveCli</RootNamespace>
+    <AssemblyName>heartbeat-live</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\src\HeartBeat.App\LiveSession.cs" Link="App\LiveSession.cs" />
+    <Compile Include="..\..\src\HeartBeat.App\AppSettings.cs" Link="App\AppSettings.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\HeartBeat.Core\HeartBeat.Core.csproj" />
+    <ProjectReference Include="..\..\src\HeartBeat.Osc\HeartBeat.Osc.csproj" />
+    <ProjectReference Include="..\..\src\HeartBeat.Tracking\HeartBeat.Tracking.csproj" />
+  </ItemGroup>
+
+</Project>
