@@ -18,6 +18,9 @@ const string Usage = """
       --beats     print a line for every beat event
       --seconds   stop after N seconds
       --chest     treat the tracker with this serial as the chest tracker (also saved to settings)
+      --chatbox   also show the heart rate in the VRChat chatbox (visible to others)
+      --poses-stdin  read tracked poses from stdin instead of SteamVR (Monado: pipe in
+                  tools/linux/tap --stream); line format in PoseStdinLive.cs
 
     SteamVR must already be running. On Linux, libopenvr_api.so is found through $OPENVR_API_LIB,
     $VR_OVERRIDE/bin/linux64, or Steam's SteamVR install.
@@ -26,7 +29,7 @@ const string Usage = """
 string configDir = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME") is { Length: > 0 } x
     ? x : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
 string settingsPath = Path.Combine(configDir, "virtual-heartbeat-monitor", "settings.json");
-bool osc = true, printBeats = false;
+bool osc = true, printBeats = false, chatbox = false, posesStdin = false;
 double? seconds = null;
 string? chest = null;
 for (int i = 0; i < args.Length; i++)
@@ -38,6 +41,8 @@ for (int i = 0; i < args.Length; i++)
         case "--beats": printBeats = true; break;
         case "--seconds": seconds = double.Parse(args[++i], CultureInfo.InvariantCulture); break;
         case "--chest": chest = args[++i]; break;
+        case "--chatbox": chatbox = true; break;
+        case "--poses-stdin": posesStdin = true; break;
         case "-h" or "--help": Console.WriteLine(Usage); return 0;
         default: Console.Error.WriteLine($"Unknown option '{args[i]}'\n\n{Usage}"); return 1;
     }
@@ -49,6 +54,19 @@ if (chest != null && !settings.Devices.ChestTrackerSerials.Contains(chest))
 {
     settings.Devices.ChestTrackerSerials.Add(chest);
     settings.Save(settingsPath);
+}
+
+if (chatbox) settings.Osc.Chatbox = true;
+
+if (posesStdin)
+{
+    UdpOscSink? psink = osc && settings.Osc.Enabled ? new UdpOscSink(settings.Osc.Host, settings.Osc.Port) : null;
+    VRChatOutput? pout = psink != null ? new VRChatOutput(psink, settings.Osc) : null;
+    Console.CancelKeyPress += (_, e) => { e.Cancel = true; Console.In.Close(); };
+    int rc;
+    try { rc = PoseStdinLive.Run(settings, pout, printBeats, seconds, pout != null ? $"{settings.Osc.Host}:{settings.Osc.Port}{(settings.Osc.Chatbox ? " + chatbox" : "")}" : "off"); }
+    finally { pout?.Disconnect(); pout?.Dispose(); psink?.Dispose(); }
+    return rc;
 }
 
 VrRuntime vr;

@@ -13,6 +13,7 @@ import argparse
 import ctypes
 import json
 import os
+import sys
 import threading
 import time
 from ctypes import POINTER, Structure, byref, c_char, c_int, c_uint32, c_uint64, c_void_p
@@ -151,6 +152,28 @@ class Sink:
         (self.folder / "session.json").write_text(json.dumps(meta, indent=2) + "\n")
 
 
+class StreamSink:
+    """Live mode: one line per valid pose on stdout for LiveCli --poses-stdin
+    (serial,kind,t,qw,qx,qy,qz,vx,vy,vz,wx,wy,wz)."""
+
+    def __init__(self, devices):
+        self.kinds = {d["serial"]: d["kind"] for d in devices}
+        self.rows = 0
+
+    def write(self, serial, t, loc, vel):
+        lf, vf = loc.location_flags, vel.velocity_flags
+        if not (lf & xr.SPACE_LOCATION_ORIENTATION_VALID_BIT and vf & xr.SPACE_VELOCITY_ANGULAR_VALID_BIT
+                and vf & xr.SPACE_VELOCITY_LINEAR_VALID_BIT):
+            return
+        q, v, w = loc.pose.orientation, vel.linear_velocity, vel.angular_velocity
+        sys.stdout.write(f"{serial},{self.kinds[serial]},{t:.6f},{q.w:.9g},{q.x:.9g},{q.y:.9g},{q.z:.9g},"
+                         f"{v.x:.9g},{v.y:.9g},{v.z:.9g},{w.x:.9g},{w.y:.9g},{w.z:.9g}\n")
+        self.rows += 1
+
+    def close(self, meta):
+        sys.stdout.flush()
+
+
 def ask_pulse(when):
     try:
         s = input(f"Pulse-ox reading {when} (BPM, Enter to skip): ").strip()
@@ -169,7 +192,15 @@ def main():
     ap.add_argument("--kinds", default="", help="SERIAL=Kind,... overrides")
     ap.add_argument("--list", action="store_true", help="list xdevs and exit")
     ap.add_argument("--no-pulse", action="store_true")
+    ap.add_argument("--stream", action="store_true",
+                    help="no files: print frame-time poses to stdout until killed (pipe into LiveCli --poses-stdin)")
     a = ap.parse_args()
+    if a.stream:
+        a.no_pulse = True
+        a.seconds = float("inf")
+        global print
+        _print = print
+        print = lambda *x, **k: _print(*x, file=sys.stderr, **k)
     for kv in filter(None, a.kinds.split(",")):
         s, k = kv.split("=")
         KINDS_BY_SERIAL[s] = k
@@ -242,7 +273,10 @@ def main():
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     prefix = Path(a.out) if a.out else Path("recordings") / f"{stamp}_{a.label}"
     kinds = [{"kind": d["kind"], "serial": d["serial"]} for d in devices]
-    sinks = {m: Sink(Path(f"{prefix}-{m}"), kinds) for m in ("frame-predicted", "frame-now", "poll-now")}
+    if a.stream:
+        sinks = {"frame-now": StreamSink(kinds)}
+    else:
+        sinks = {m: Sink(Path(f"{prefix}-{m}"), kinds) for m in ("frame-predicted", "frame-now", "poll-now")}
     print("Devices:", ", ".join(f"{d['kind']} {d['model']} [{d['serial']}]" for d in devices))
 
     def locate(d, t):
@@ -300,9 +334,13 @@ def main():
             if t0[0] is None:
                 t0[0] = now
                 started = time.monotonic()
-                th.start()
-                print(f"Recording {a.seconds:.0f} s to {prefix}-*  (sit still; Ctrl+C stops early)")
+                if not a.stream:
+                    th.start()
+                print(f"Streaming poses to stdout" if a.stream else f"Recording {a.seconds:.0f} s to {prefix}-*  (sit still; Ctrl+C stops early)")
             for d in devices:
+                if a.stream:
+                    sinks["frame-now"].write(d["serial"], (now - t0[0]) / 1e9, *locate(d, now))
+                    continue
                 loc, vel = locate(d, fs.predicted_display_time)
                 with lock:
                     sinks["frame-predicted"].write(d["serial"], (fs.predicted_display_time - t0[0]) / 1e9, loc, vel)
@@ -313,9 +351,11 @@ def main():
                                                   environment_blend_mode=xr.EnvironmentBlendMode.OPAQUE,
                                                   layers=None))
             frames += 1
+            if a.stream:
+                sys.stdout.flush()
             el = time.monotonic() - started
             if frames % 450 == 0:
-                print(f"  {el:5.0f} / {a.seconds:.0f} s  frames {frames}  ({frames / el:.1f} Hz)  poll rows {sinks['poll-now'].rows}")
+                print(f"  {el:5.0f} / {a.seconds:.0f} s  frames {frames}  ({frames / el:.1f} Hz)  rows {sum(s.rows for s in sinks.values())}")
             if el >= a.seconds:
                 break
     except KeyboardInterrupt:
@@ -335,7 +375,7 @@ def main():
                             for i, d in enumerate(devices)],
                 "columns": {"poses": "host_t: s from XrTime; STAGE space; v: m/s; w: rad/s; result 200 = valid"}}
         s.close(meta)
-        print(f"Saved {s.rows} rows to {s.folder}")
+        print(f"Saved {s.rows} rows to {s.folder}" if hasattr(s, "folder") else f"Streamed {s.rows} poses")
     xr.request_exit_session(session)
     glfw.terminate()
 

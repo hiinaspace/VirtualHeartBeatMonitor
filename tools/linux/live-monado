@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Live heart rate under Monado: the OpenXR pose tap streams poses into LiveCli, which sends
+# OSC to VRChat. Extra args go to LiveCli, e.g. --chatbox --chest SERIAL --no-osc.
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+nix-shell -p dotnet-sdk_10 --run "dotnet build -v q --nologo tools/LiveCli" >&2
+dll=$(ls tools/LiveCli/bin/Debug/net*/heartbeat-live.dll | head -1)
+tools/linux/tap --stream | nix-shell -p dotnet-sdk_10 --run "dotnet $dll --poses-stdin $*"
